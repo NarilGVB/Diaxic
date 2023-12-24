@@ -10,6 +10,7 @@ namespace Diaxic
     [Serializable]
     public class SavedData
     {
+        public string version;
         public List<NodeData> story;
         public List<string> variables;
         public List<string> variablesValues;
