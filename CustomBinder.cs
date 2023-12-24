@@ -31,9 +31,9 @@ namespace Diaxic
                 case "Diaxic.ConditionalType": return typeof(ConditionalType);
                 case "Diaxic.ConditionalLineData": return typeof(ConditionalLineData);
                 case "Diaxic.ChoiceData": return typeof(ChoiceData);
-                case "System.Collections.Generic.List`1[[Diaxic.NodeData, Assembly-CSharp]]": return typeof(List<NodeData>);
-                case "System.Collections.Generic.List`1[[Diaxic.LineData, Assembly-CSharp]]": return typeof(List<LineData>);
-                case "System.Collections.Generic.List`1[[Diaxic.ConditionalLineData, Assembly-CSharp]]": return typeof(List<ConditionalLineData>);
+                case "System.Collections.Generic.List`1[[Diaxic.NodeData, Assembly-CSharp-firstpass]]": return typeof(List<NodeData>);
+                case "System.Collections.Generic.List`1[[Diaxic.LineData, Assembly-CSharp-firstpass]]": return typeof(List<LineData>);
+                case "System.Collections.Generic.List`1[[Diaxic.ConditionalLineData, Assembly-CSharp-firstpass]]": return typeof(List<ConditionalLineData>);
 #if UNITY_EDITOR || UNITY_STANDALONE
                 case "UnityEngine.Vector3": return typeof(UnityEngine.Vector3);
 #endif
