@@ -47,4 +47,36 @@ namespace Diaxic
             typeName = serializedType.FullName;
         }
     }
+    
+    public class OldCustomBinder : DefaultSerializationBinder
+    {
+        public override Type BindToType(string assemblyName, string typeName)
+        {
+            switch (typeName)
+            {
+                case "OldSavedData": return typeof(SavedData);
+                case "OldNodeData": return typeof(NodeData);
+                case "OldLineData": return typeof(LineData);
+                case "DialogueLineData": return typeof(DialogueLineData);
+                case "ActionLineData": return typeof(ActionLineData);
+                case "GoToLineData": return typeof(GoToLineData);
+                case "ConditionalType": return typeof(ConditionalType);
+                case "ConditionalLineData": return typeof(ConditionalLineData);
+                case "ChoiceData": return typeof(ChoiceData);
+                case "System.Collections.Generic.List`1[[OldNodeData, Assembly-CSharp]]": return typeof(List<NodeData>);
+                case "System.Collections.Generic.List`1[[OldLineData, Assembly-CSharp]]": return typeof(List<LineData>);
+                case "System.Collections.Generic.List`1[[ConditionalLineData, Assembly-CSharp]]": return typeof(List<ConditionalLineData>);
+#if UNITY_EDITOR || UNITY_STANDALONE
+                case "UnityEngine.Vector3": return typeof(UnityEngine.Vector3);
+#endif
+                default: return base.BindToType(assemblyName, typeName);
+            }
+        }
+
+        public override void BindToName(Type serializedType, out string assemblyName, out string typeName)
+        {
+            assemblyName = null;
+            typeName = serializedType.FullName;
+        }
+    }
 }
