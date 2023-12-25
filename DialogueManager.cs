@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -60,15 +60,26 @@ namespace Diaxic
         private bool _waitingChoice;
         public int _waitingJump = -1;
 
-        public DialogueManager(List<NodeData> story, IDictionary<string, string> variables, Dictionary<string, string> localization = null)
+        public DialogueManager(SavedData data, Dictionary<string, string> variables, Dictionary<string, string> localization = null)
         {
-            if (story.Count < 1) { throw new Exception("The story data doesn't have at least one node."); }
-            _story = story;
+            if (data.story.Count < 1) { throw new Exception("The story data doesn't have at least one node."); }
+            _story = data.story;
             _localization = localization ?? new Dictionary<string, string>();
-            this.variables = new Dictionary<string, string>(variables);
+            this.variables = variables;
             HistoryEntry historyEntry = new HistoryEntry { nodeIndex = 0 };
             _history.Add(historyEntry);
+            AddVariables(data.variables, data.variablesValues);
             SaveNextLines();
+        }
+
+        private void AddVariables(List<string> savedVars, List<string> savedValues)
+        {
+            for (int i = 0; i < savedVars.Count; i++)
+            {
+                if (variables.ContainsKey(savedVars[i].ToLower())) continue;
+                
+                variables.Add(savedVars[i].ToLower(), savedValues[i]);
+            }
         }
 
         public void RestartDialogue(bool removeHistory = true)
@@ -493,8 +504,9 @@ namespace Diaxic
                         throw new Exception("Non valid operator: " + condition);
                     
                     int val;
-                    if (variables.ContainsKey(variable))
+                    if (variables.ContainsKey(variable.ToLower()))
                     {
+                        variable = variable.ToLower();
                         if (!int.TryParse(variables[variable], out int var))
                             return op == "==" ^ !string.Equals(variables[variable], value,
                                 StringComparison.CurrentCultureIgnoreCase);
