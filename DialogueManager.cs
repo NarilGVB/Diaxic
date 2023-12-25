@@ -266,9 +266,10 @@ namespace Diaxic
             Line firstLine = lines[0];
             lines.RemoveAt(0);
 
-            if (firstLine is ActionLine)
+            string[] splitLine = firstLine.text.Split('\n');
+            foreach (string line in splitLine)
             {
-                ParseActionLine(firstLine.text);
+                ParseActionLine(line);
             }
 
             return firstLine;
