@@ -46,19 +46,18 @@ namespace Diaxic
     public class DialogueManager
     {
         public readonly Dictionary<string, string> variables;
+        public int CurrentNode => _direction[0];
 
         private readonly List<NodeData> _story;
         private readonly Dictionary<string, Dictionary<int, int>> _storyPath = new Dictionary<string, Dictionary<int, int>>();
         private readonly Dictionary<int, int> _storyPathByIndex = new Dictionary<int, int>();
 
-        private readonly List<Line> _nextLines = new List<Line>();
         private readonly List<HistoryEntry> _history = new List<HistoryEntry>();
         
         private readonly Dictionary<string, string> _localization;
 
-        private int _currentNode = 0;
         private bool _waitingChoice;
-        public int _waitingJump = -1;
+        private List<int> _direction = new List<int>{0,-1};
 
         public DialogueManager(SavedData data, Dictionary<string, string> variables, Dictionary<string, string> localization = null)
         {
@@ -69,7 +68,6 @@ namespace Diaxic
             HistoryEntry historyEntry = new HistoryEntry { nodeIndex = 0 };
             _history.Add(historyEntry);
             AddVariables(data.variables, data.variablesValues);
-            SaveNextLines();
         }
 
         private void AddVariables(List<string> savedVars, List<string> savedValues)
@@ -84,9 +82,11 @@ namespace Diaxic
 
         public void RestartDialogue(bool removeHistory = true)
         {
-            _currentNode = 0;
+            _direction = new List<int>{0, -1};
             _waitingChoice = false;
-            HistoryEntry historyEntry = new HistoryEntry { nodeIndex = 0 };
+            if (!removeHistory) return;
+            
+            HistoryEntry historyEntry = new HistoryEntry {nodeIndex = 0};
             _history.Add(historyEntry);
         }
 
@@ -97,67 +97,93 @@ namespace Diaxic
                 throw new Exception("The dialogue is waiting for a choice.");
             }
 
-            Output output;
-            if (_nextLines.Count > 0)
+            List<LineData> lines = _story[CurrentNode].lines;
+            
+            _direction[^1]++;
+            for (int i = 1; i < _direction.Count;)
             {
-                output = ExtractFirstTextLine(_nextLines);
-            }
-            else if (_waitingJump != -1)
-            {
-                JumpToNode(_waitingJump, _currentNode);
-                output = GetNextLine();
-            }
-            else
-            {
-                output = GetChoicesLine(_history[^1].nodeIndex);
+                int index = _direction[i];
+
+                if (index > lines.Count - 1)
+                {
+                    _direction.RemoveAt(i);
+                    i--;
+                    if (_direction.Count == 1) break;
+                    _direction.RemoveAt(i);
+                    i--;
+                    if (_direction.Count == 1) break;
+
+                    _direction[i]++;
+                    lines = _story[CurrentNode].lines;
+                    continue;
+                }
+                
+                switch (lines[index])
+                {
+                    case ConditionalLineData cond:
+                    {
+                        if (i + 1 < _direction.Count)
+                        {
+                            i++;
+                            index = _direction[i];
+                            lines = index == 0 ? cond.lines : cond.nestedConditionals[index - 1].lines;
+                        }
+                        else
+                        {
+                            (int condInd, ConditionalLineData condData) = GetValidCondition(cond);
+                            if (condInd == -1)
+                            {
+                                _direction[i]++;
+                                continue;
+                            }
+
+                            i++;
+                            _direction.Add(condInd);
+                            _direction.Add(0);
+                            lines = condData.lines;
+                        }
+
+                        i++;
+                        continue;
+                    }
+                    case GoToLineData goTo:
+                        if (goTo.targetIndex == -1)
+                        {
+                            _direction[i]++;
+                            continue;
+                        }
+                        JumpToNode(goTo.targetIndex, CurrentNode);
+                        return GetNextLine();
+                }
+
+                for (int j = _direction.Count - 1; j > i; j--) _direction.RemoveAt(j);
+                
+                return GetLine(lines[index]);
             }
 
-            return output;
+            return GetChoicesLine(_history[^1].nodeIndex);
         }
 
-        public Line PeekNextLine ()
-        {
-            return _nextLines.Count == 0 ? null : _nextLines[0];
-        }
-
-        private void SaveNextLines()
-        {
-            foreach (LineData lineData in _story[_currentNode].lines)
-            {
-                SaveLine(lineData);
-                if(_waitingJump != -1) return;
-            }
-        }
-
-        private void SaveLine(LineData lineData)
+        private Line GetLine(LineData lineData)
         {
             switch (lineData)
             {
                 case DialogueLineData dialogueLineData:
-                    string id = _story[_currentNode].Id + "." + dialogueLineData.index;
-                    _nextLines.Add(new DialogueLine
+                    string id = _story[CurrentNode].Id + "." + dialogueLineData.index;
+                    return new DialogueLine
                     {
                         id = id,
                         speaker = dialogueLineData.speaker,
-                        text = GetDialogueText(id, dialogueLineData.text, _currentNode)
-                    });
-                    break;
+                        text = GetDialogueText(id, dialogueLineData.text, CurrentNode)
+                    };
                 case ActionLineData actionLineData:
-                    _nextLines.Add(new ActionLine
+                    ParseActionLine(actionLineData);
+                    return new ActionLine
                     {
                         text = actionLineData.text
-                    });
-                    break;
-                case GoToLineData goToLineData:
-                    _waitingJump = goToLineData.targetIndex;
-                    break;
-                case ConditionalLineData conditionalLineData:
-                    List<LineData> linesData = GetConditionLines(conditionalLineData);
-                    foreach (LineData data in linesData)
-                    {
-                        SaveLine(data);
-                    }
-                    break;
+                    };
+                default:
+                    throw new Exception("Line type to output is not correct.");
             }
         }
 
@@ -174,6 +200,78 @@ namespace Diaxic
             return line;
         }
 
+        public bool IsNextLineJump()
+        {
+            if (_waitingChoice) return false;
+
+            List<int> directionCopy = new List<int>(_direction);
+            
+            List<LineData> lines = _story[directionCopy[0]].lines;
+
+            directionCopy[^1]++;
+            for (int i = 1; i < directionCopy.Count;)
+            {
+                int index = directionCopy[i];
+
+                if (index > lines.Count - 1)
+                {
+                    directionCopy.RemoveAt(i);
+                    i--;
+                    if (directionCopy.Count == 1) break;
+                    directionCopy.RemoveAt(i);
+                    i--;
+                    if (directionCopy.Count == 1) break;
+
+                    directionCopy[i]++;
+                    lines = _story[directionCopy[0]].lines;
+                    continue;
+                }
+                
+                switch (lines[index])
+                {
+                    case ConditionalLineData cond:
+                    {
+                        if (i + 1 < directionCopy.Count)
+                        {
+                            i++;
+                            index = directionCopy[i];
+                            lines = index == 0 ? cond.lines : cond.nestedConditionals[index - 1].lines;
+                        }
+                        else
+                        {
+                            (int condInd, ConditionalLineData condData) = GetValidCondition(cond);
+                            if (condInd == -1)
+                            {
+                                directionCopy[i]++;
+                                continue;
+                            }
+
+                            i++;
+                            directionCopy.Add(condInd);
+                            directionCopy.Add(0);
+                            lines = condData.lines;
+                        }
+
+                        i++;
+                        continue;
+                    }
+                    case GoToLineData goTo:
+                        if (goTo.targetIndex == -1)
+                        {
+                            directionCopy[i]++;
+                            continue;
+                        }
+                        return true;
+                }
+
+                for (int j = _direction.Count - 1; j > i; j--) _direction.RemoveAt(j);
+                
+                return false;
+            }
+
+            return false;
+        }
+
         public void SetChoice(int choiceIndex)
         {
             if (!_waitingChoice)
@@ -181,9 +279,9 @@ namespace Diaxic
                 throw new Exception("The dialogue is not waiting for a choice.");
             }
 
-            TryGetChoiceTarget(_story[_currentNode].choices, choiceIndex, out int targetIndex);
+            TryGetChoiceTarget(_story[CurrentNode].choices, choiceIndex, out int targetIndex);
             
-            JumpToNode(targetIndex, _currentNode, choiceIndex);
+            JumpToNode(targetIndex, CurrentNode, choiceIndex);
             _waitingChoice = false;
         }
 
@@ -252,56 +350,21 @@ namespace Diaxic
             }
 
             _history.Add(newEntry);
-            _currentNode = targetIndex;
-            _waitingJump = -1;
-            
-            if (targetIndex != -1)
-            {
-                SaveNextLines();
-            }
+            _direction = new List<int> {targetIndex, -1};
         }
 
-        private Line ExtractFirstTextLine(IList<Line> lines)
+        private void ParseActionLine(ActionLineData lines)
         {
-            Line firstLine = lines[0];
-            lines.RemoveAt(0);
-
-            string[] splitLine = firstLine.text.Split('\n');
+            string[] splitLine = lines.text.Split('\n');
             foreach (string line in splitLine)
             {
                 ParseActionLine(line);
             }
-
-            return firstLine;
         }
 
         private void ParseActionLine(string line)
         {
-            Match match = Regex.Match(line, "^!(?<bool>\\w*)$", RegexOptions.IgnoreCase);
-            if (match.Success)
-            {
-                string var = match.Groups["bool"].Value.ToLower();
-                string val = variables[var];
-                switch (val.ToLower())
-                {
-                    case "true":
-                        variables[var] = "false";
-                        break;
-                    case "false":
-                        variables[var] = "true";
-                        break;
-                }
-                return;
-            }
-
-            match = Regex.Match(line, "^(?<event>\\w*) = (?<result>true|false)$", RegexOptions.IgnoreCase);
-            if (match.Success)
-            {
-                variables[match.Groups["event"].Value.ToLower()] = match.Groups["result"].Value.ToLower();
-                return;
-            }
-            
-            match = Regex.Match(line, "^(?<var>\\w*) = (?<value>.*)$", RegexOptions.IgnoreCase);
+            Match match = Regex.Match(line, "^(?<var>\\w*) = (?<value>.*)$", RegexOptions.IgnoreCase);
             if (match.Success)
             {
                 variables[match.Groups["var"].Value.ToLower()] = EvaluatePredicate(match.Groups["value"].Value.Trim());
@@ -313,12 +376,24 @@ namespace Diaxic
             if (variables.ContainsKey(predicate))
                 return variables[predicate];
 
-            if (TryIntOperation(predicate, out int result))
+            if (TryIntOperation(predicate, out int intResult))
             {
-                return result.ToString();
+                return intResult.ToString();
             }
 
+            if (TryBoolOperation(predicate, out bool boolResult))
+            {
+                return boolResult.ToString();
+            }
+            
             return predicate;
+        }
+
+        private bool TryBoolOperation(string predicate, out bool result)
+        {
+            result = AreConditionsValid(predicate);
+
+            return true;
         }
 
         private bool TryIntOperation(string predicate, out int result)
@@ -390,7 +465,7 @@ namespace Diaxic
                 {
                     case ConditionalLineData data:
                     {
-                        List<LineData> linesData = GetConditionLines(data);
+                        List<LineData> linesData = GetValidCondition(data).Item2.lines;
                         foreach (LineData conditionalLineData in linesData)
                         {
                             if (conditionalLineData is ChoiceData choiceData)
@@ -428,24 +503,23 @@ namespace Diaxic
             return choices;
         }
 
-        public List<LineData> GetConditionLines(ConditionalLineData data)
+        public (int, ConditionalLineData) GetValidCondition(ConditionalLineData data)
         {
-            List<LineData> list = new List<LineData>();
-
             if (AreConditionsValid(data.comparison))
             {
-                return data.lines;
+                return (0, data);
             }
 
-            foreach (ConditionalLineData conditional in data.nestedConditionals)
+            for (int i = 0; i < data.nestedConditionals.Count; i++)
             {
+                ConditionalLineData conditional = data.nestedConditionals[i];
                 if (AreConditionsValid(conditional.comparison))
                 {
-                    return conditional.lines;
+                    return (i + 1, conditional);
                 }
             }
 
-            return list;
+            return (-1, null);
         }
 
         private bool AreConditionsValid(string conditions)
