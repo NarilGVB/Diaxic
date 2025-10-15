@@ -4,7 +4,7 @@ This repository is the integration of [this Dialogue Visual Tool](https://narilg
 
 SavedData -> The Dialogue Visual Tool exports a json file that needs to be deserialize into this class.
 
-Deserialization example:
+Deserialization example using Newtonsoft's Json Deserializer:
 
     public static class JsonSerialization
     {
