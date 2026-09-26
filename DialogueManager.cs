@@ -200,8 +200,9 @@ namespace Diaxic
             return line;
         }
 
-        public bool IsNextLineJump()
+        public bool IsNextLineJump(out int destination)
         {
+            destination = -1;
             if (_waitingChoice) return false;
 
             List<int> directionCopy = new List<int>(_direction);
@@ -261,6 +262,8 @@ namespace Diaxic
                             directionCopy[i]++;
                             continue;
                         }
+
+                        destination = goTo.targetIndex;
                         return true;
                 }
 
@@ -355,7 +358,7 @@ namespace Diaxic
 
         private void ParseActionLine(ActionLineData lines)
         {
-            string[] splitLine = lines.text.Split('\n');
+            string[] splitLine = lines.text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
             foreach (string line in splitLine)
             {
                 ParseActionLine(line);
@@ -465,7 +468,10 @@ namespace Diaxic
                 {
                     case ConditionalLineData data:
                     {
-                        List<LineData> linesData = GetValidCondition(data).Item2.lines;
+                        (int index, ConditionalLineData validData) = GetValidCondition(data);
+                        if (index < 0) break;
+                        
+                        List<LineData> linesData = validData.lines;
                         foreach (LineData conditionalLineData in linesData)
                         {
                             if (conditionalLineData is ChoiceData choiceData)
