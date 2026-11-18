@@ -394,9 +394,17 @@ namespace Diaxic
 
         private bool TryBoolOperation(string predicate, out bool result)
         {
-            result = AreConditionsValid(predicate);
-
-            return true;
+            result = false;
+            
+            try
+            {
+                result = AreConditionsValid(predicate);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private bool TryIntOperation(string predicate, out int result)
@@ -568,6 +576,11 @@ namespace Diaxic
                 case 0:
                     return true;
                 case 1:
+                    if (TryParseToTrueOrFalse(condition, out bool result))
+                    {
+                        return result;
+                    }
+                    
                     Match match = Regex.Match(condition, "^!(.*)", RegexOptions.IgnoreCase);
                     return match.Success ? IsBooleanComparisonValid(match.Groups[1].Value, "==", false) :
                         IsBooleanComparisonValid(conditionSplit[0].Trim(), "==", true);
@@ -603,15 +616,27 @@ namespace Diaxic
                         return op == "==" ^ !string.Equals(variables[variable], value, StringComparison.CurrentCultureIgnoreCase);
                     }
             
-                    if (Regex.IsMatch(value, "(True|False)", RegexOptions.IgnoreCase))
+                    if (TryParseToTrueOrFalse(value, out bool res))
                     {
-                        return IsBooleanComparisonValid(variable, op, bool.Parse(value));
+                        return IsBooleanComparisonValid(variable, op, res);
                     }
             
                     return int.TryParse(value, out val) && IsIntegerComparisonValid(GetPathCount(variable), val, op);
                 default:
                     throw new Exception("Non valid expresion: " + condition);
             }
+        }
+
+        private bool TryParseToTrueOrFalse(string value, out bool result)
+        {
+            result = false;
+            if (Regex.IsMatch(value, "(True|False)", RegexOptions.IgnoreCase))
+            {
+                result = bool.Parse(value);
+                return true;
+            }
+            
+            return false;
         }
 
         private bool DoVariableExist(string variable)
