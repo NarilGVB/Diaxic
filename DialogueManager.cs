@@ -49,20 +49,22 @@ namespace Diaxic
         public int CurrentNode => _direction[0];
 
         private readonly List<NodeData> _story;
-        private readonly Dictionary<string, Dictionary<int, int>> _storyPath = new Dictionary<string, Dictionary<int, int>>();
-        private readonly Dictionary<int, int> _storyPathByIndex = new Dictionary<int, int>();
+        private readonly Dictionary<string, NodeData> _nodesDictionary = new();
+        private readonly Dictionary<string, Dictionary<int, int>> _storyPath = new();
+        private readonly Dictionary<int, int> _storyPathByIndex = new();
 
-        private readonly List<HistoryEntry> _history = new List<HistoryEntry>();
+        private readonly List<HistoryEntry> _history = new();
         
         private readonly Dictionary<string, string> _localization;
 
         private bool _waitingChoice;
-        private List<int> _direction = new List<int>{0,-1};
+        private List<int> _direction = new() {0,-1};
 
         public DialogueManager(SavedData data, Dictionary<string, string> variables, Dictionary<string, string> localization = null)
         {
             if (data.story.Count < 1) { throw new Exception("The story data doesn't have at least one node."); }
             _story = data.story;
+            _nodesDictionary = _story.ToDictionary(node => node.Id, node => node);
             _localization = localization ?? new Dictionary<string, string>();
             this.variables = variables;
             HistoryEntry historyEntry = new HistoryEntry { nodeIndex = 0 };
@@ -602,8 +604,14 @@ namespace Diaxic
                     {
                         variable = variable.ToLower();
                         if (!int.TryParse(variables[variable], out int var))
+                        {
+                            if (!Regex.IsMatch(op, "(==|!=)", RegexOptions.IgnoreCase))
+                                throw new Exception("Non valid operator: " + condition);
+                            
                             return op == "==" ^ !string.Equals(variables[variable], value,
                                 StringComparison.CurrentCultureIgnoreCase);
+                        }
+
                         if (int.TryParse(value, out val))
                         {
                             return IsIntegerComparisonValid(var, val, op);
@@ -642,13 +650,26 @@ namespace Diaxic
         private bool DoVariableExist(string variable)
         {
             if (_storyPath.ContainsKey(variable)) { return true; }
-            if (!Regex.IsMatch(variable, "\\$", RegexOptions.IgnoreCase)) return false;
+            
+            if (!Regex.IsMatch(variable, "\\$", RegexOptions.IgnoreCase))
+            {
+                if (!_nodesDictionary.ContainsKey(variable))
+                    throw new Exception("Variable " + variable + " not found");
+                
+                return false;
+            }
             
             string[] s = variable.Split(new[] { "$" }, StringSplitOptions.None);
             string name = s[0];
-            if (!_storyPath.ContainsKey(name)) return false;
+            if (!_storyPath.ContainsKey(name))
+            {
+                if (!_nodesDictionary.ContainsKey(name))
+                    throw new Exception("Variable " + name + " not found");
+                
+                return false;
+            }
 
-            return int.TryParse(s[s.Length - 1], out int choice) && _storyPath[name].ContainsKey(choice);
+            return int.TryParse(s[^1], out int choice) && _storyPath[name].ContainsKey(choice);
         }
 
         private int GetPathCount(string variable)
@@ -662,7 +683,7 @@ namespace Diaxic
             string[] s = variable.Split(new[] { "$" }, StringSplitOptions.None);
             string name = s[0];
             if (!_storyPath.ContainsKey(name)) return 0;
-            if (!int.TryParse(s[s.Length - 1], out int choice)) return 0;
+            if (!int.TryParse(s[^1], out int choice)) return 0;
                 
             return _storyPath[name].ContainsKey(choice) ? _storyPath[name][choice] : 0;
         }
@@ -682,7 +703,7 @@ namespace Diaxic
                 "!=" => variable != value,
                 "<=" => variable <= value,
                 ">=" => variable >= value,
-                _ => false
+                _ => throw new Exception("Comparison operator is not valid: " + comparisonOperator)
             };
         }
 
